@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+from datetime import datetime, timezone
 import requests
 from bs4 import BeautifulSoup
 from telegram import Update
@@ -196,6 +197,9 @@ CATEGORY: [category here]"""
 def save_to_notion(title: str, category: str, url: str) -> tuple[bool, str]:
     """Save entry to Notion database"""
     try:
+        # Get current time in ISO 8601 format
+        added_time = datetime.now(timezone.utc).isoformat()
+
         notion.pages.create(
             parent={"database_id": NOTION_DATABASE_ID},
             properties={
@@ -221,6 +225,11 @@ def save_to_notion(title: str, category: str, url: str) -> tuple[bool, str]:
                             }
                         }
                     ]
+                },
+                "Added Time": {
+                    "date": {
+                        "start": added_time
+                    }
                 }
             }
         )
