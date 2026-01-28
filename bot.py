@@ -214,7 +214,8 @@ Respond with ONLY the category name exactly as shown above, nothing else."""
 
 def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str]:
     """
-    Use Claude to create a title and assign a category based on fetched content.
+    Use Claude to create a title and assign a category based on content.
+    Works for both URL-fetched content and plain text input.
     """
     try:
         # Truncate content if too long
@@ -222,18 +223,18 @@ def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str
             content = content[:2000] + "..."
 
         categories_list = "\n".join(f"- {c}" for c in CATEGORIES)
+        source_line = f"\nURL: {url}" if url else ""
         message = claude.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=200,
             messages=[
                 {
                     "role": "user",
-                    "content": f"""Based on this content from a URL, provide:
+                    "content": f"""Based on this content, provide:
 1. A concise title (under 50 characters, match the source language - if content is Chinese, title should be Chinese)
 2. A category from this list ONLY:
 {categories_list}
-
-URL: {url}
+{source_line}
 Content: {content}
 
 Respond in this exact format (two lines only):
@@ -270,44 +271,48 @@ CATEGORY: [category exactly as shown above]"""
         return "Untitled", "Idea Collection"
 
 
-def save_to_notion(title: str, category: str, url: str) -> tuple[bool, str]:
-    """Save entry to Notion database"""
+def save_to_notion(title: str, category: str, content: str) -> tuple[bool, str]:
+    """Save entry to Notion database. Content can be a URL or plain text."""
     try:
         # Get current time in ISO 8601 format
         added_time = datetime.now(timezone.utc).isoformat()
 
-        notion.pages.create(
-            parent={"database_id": NOTION_DATABASE_ID},
-            properties={
-                "Title": {
-                    "title": [
-                        {
-                            "text": {
-                                "content": title
-                            }
+        properties = {
+            "Title": {
+                "title": [
+                    {
+                        "text": {
+                            "content": title
                         }
-                    ]
-                },
-                "Category": {
-                    "select": {
-                        "name": category
                     }
-                },
-                "Content": {
-                    "rich_text": [
-                        {
-                            "text": {
-                                "content": url
-                            }
-                        }
-                    ]
-                },
-                "Added Time": {
-                    "date": {
-                        "start": added_time
-                    }
+                ]
+            },
+            "Category": {
+                "select": {
+                    "name": category
+                }
+            },
+            "Added Time": {
+                "date": {
+                    "start": added_time
                 }
             }
+        }
+
+        if content:
+            properties["Content"] = {
+                "rich_text": [
+                    {
+                        "text": {
+                            "content": content
+                        }
+                    }
+                ]
+            }
+
+        notion.pages.create(
+            parent={"database_id": NOTION_DATABASE_ID},
+            properties=properties
         )
         return True, ""
     except Exception as e:
@@ -323,18 +328,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Extract message parts
     title, url, needs_fetching = extract_message_parts(text)
 
-    if not url:
-        await update.message.reply_text(
-            "❌ No URL found in message.\n"
-            "Please send a message with a URL."
-        )
-        return
-
     # Send processing indicator
     await update.message.reply_text("⏳ Processing...")
 
     try:
-        if needs_fetching:
+        if not url:
+            # TYPE C: Pure text - no URL, use text as content, generate title and category
+            logger.info(f"Type C: Pure text detected")
+            title, category = get_title_and_category_from_claude(text, "")
+            content_to_save = text
+        elif needs_fetching:
             # TYPE B: Pure URL - need to fetch content and get both title and category
             logger.info(f"Type B: Pure URL detected, fetching content from {url}")
             content = fetch_url_content(url)
@@ -344,13 +347,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             else:
                 # If we couldn't fetch content, use URL domain as hint
                 title, category = get_title_and_category_from_claude(f"URL: {url}", url)
+            content_to_save = url
         else:
             # TYPE A: Has meaningful text - use it as title, just get category
             logger.info(f"Type A: Title detected: {title}")
             category = get_category_from_claude(title)
+            content_to_save = url
 
         # Save to Notion
-        success, error = save_to_notion(title, category, url)
+        success, error = save_to_notion(title, category, content_to_save)
 
         if success:
             await update.message.reply_text(
