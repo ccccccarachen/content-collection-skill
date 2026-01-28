@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection log --oneline -20)",
+      "Bash(python3:*)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection status)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection diff bot.py)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection log --oneline -5)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection add bot.py)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection commit -m \"$\\(cat <<''EOF''\nAdd Twitter/X oembed API support for proper title extraction\n\nUse Twitter''s oembed API to fetch actual tweet content instead of\nrelying on meta tags, which often return empty or generic text for\nX/Twitter URLs.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection push)",
+      "Bash(git -C /Users/yiqichen/Desktop/content-collection commit -m \"$\\(cat <<''EOF''\nSupport pure text input without URLs\n\nAllow the bot to accept plain text messages \\(no URL required\\) and\nsave them to Notion with an AI-generated title and category. The\noriginal text is stored in the Content column.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

@@ -271,8 +271,12 @@ CATEGORY: [category exactly as shown above]"""
         return "Untitled", "Idea Collection"
 
 
-def save_to_notion(title: str, category: str, content: str) -> tuple[bool, str]:
-    """Save entry to Notion database. Content can be a URL or plain text."""
+def save_to_notion(title: str, category: str, content: str) -> tuple[bool, str, str | None]:
+    """Save entry to Notion database. Content can be a URL or plain text.
+
+    Returns:
+        (success, error_message, page_id)
+    """
     try:
         # Get current time in ISO 8601 format
         added_time = datetime.now(timezone.utc).isoformat()
@@ -310,20 +314,79 @@ def save_to_notion(title: str, category: str, content: str) -> tuple[bool, str]:
                 ]
             }
 
-        notion.pages.create(
+        page = notion.pages.create(
             parent={"database_id": NOTION_DATABASE_ID},
             properties=properties
         )
-        return True, ""
+        return True, "", page["id"]
     except Exception as e:
         logger.error(f"Failed to save to Notion: {e}")
+        return False, str(e), None
+
+
+def update_notion_category(page_id: str, new_category: str) -> tuple[bool, str]:
+    """Update the category of an existing Notion page."""
+    try:
+        notion.pages.update(
+            page_id=page_id,
+            properties={
+                "Category": {
+                    "select": {
+                        "name": new_category
+                    }
+                }
+            }
+        )
+        return True, ""
+    except Exception as e:
+        logger.error(f"Failed to update Notion category: {e}")
         return False, str(e)
+
+
+def format_category_options() -> str:
+    """Format categories as a numbered list for display."""
+    return "\n".join(f"{i+1}. {cat}" for i, cat in enumerate(CATEGORIES))
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming messages"""
-    text = update.message.text
+    text = update.message.text.strip()
     logger.info(f"Received message: {text[:100]}...")
+
+    # Check if this is a category selection reply (single number 1-7)
+    if text.isdigit():
+        num = int(text)
+        if 1 <= num <= len(CATEGORIES):
+            # Check if there's a pending category edit
+            pending = context.user_data.get("pending_category_edit")
+            if pending:
+                new_category = CATEGORIES[num - 1]
+                page_id = pending["page_id"]
+                old_category = pending["category"]
+
+                # Clear the pending edit
+                del context.user_data["pending_category_edit"]
+
+                if new_category == old_category:
+                    await update.message.reply_text(
+                        f"Category unchanged: {old_category}"
+                    )
+                    return
+
+                success, error = update_notion_category(page_id, new_category)
+                if success:
+                    await update.message.reply_text(
+                        f"✅ Category updated: {old_category} → {new_category}"
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"❌ Failed to update category:\n{error}"
+                    )
+                return
+
+    # Clear any pending category edit when processing new content
+    if "pending_category_edit" in context.user_data:
+        del context.user_data["pending_category_edit"]
 
     # Extract message parts
     title, url, needs_fetching = extract_message_parts(text)
@@ -355,13 +418,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             content_to_save = url
 
         # Save to Notion
-        success, error = save_to_notion(title, category, content_to_save)
+        success, error, page_id = save_to_notion(title, category, content_to_save)
 
         if success:
+            # Store pending category edit info
+            context.user_data["pending_category_edit"] = {
+                "page_id": page_id,
+                "title": title,
+                "category": category
+            }
+
+            category_list = format_category_options()
             await update.message.reply_text(
                 f"✅ Saved to Notion\n"
                 f"Title: {title}\n"
-                f"Category: {category}"
+                f"Category: {category}\n\n"
+                f"Reply with a number to change category:\n{category_list}"
             )
         else:
             await update.message.reply_text(
