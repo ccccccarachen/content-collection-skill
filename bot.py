@@ -166,15 +166,30 @@ def fetch_url_content(url: str) -> str | None:
         return None
 
 
-CATEGORIES = [
-    "Vibe Coding",
-    "Idea Collection",
-    "Prompts Collection",
-    "Personal Growth",
-    "Fitness",
-    "Good Design",
-    "Mental Health",
-]
+_categories_cache: list[str] = []
+
+
+def fetch_categories_from_notion() -> list[str]:
+    """Fetch category options from the Notion database Category property."""
+    global _categories_cache
+    try:
+        db = notion.databases.retrieve(database_id=NOTION_DATABASE_ID)
+        category_prop = db["properties"].get("Category", {})
+        if category_prop.get("type") == "select":
+            options = category_prop["select"].get("options", [])
+            _categories_cache = [opt["name"] for opt in options]
+            logger.info(f"Fetched {len(_categories_cache)} categories from Notion: {_categories_cache}")
+        return _categories_cache
+    except Exception as e:
+        logger.error(f"Failed to fetch categories from Notion: {e}")
+        return _categories_cache
+
+
+def get_categories() -> list[str]:
+    """Get categories, fetching from Notion if cache is empty."""
+    if not _categories_cache:
+        fetch_categories_from_notion()
+    return _categories_cache
 
 
 def get_category_from_claude(title: str) -> str:
@@ -182,7 +197,8 @@ def get_category_from_claude(title: str) -> str:
     Use Claude to assign a category based on the title.
     """
     try:
-        categories_list = "\n".join(f"- {c}" for c in CATEGORIES)
+        categories = get_categories()
+        categories_list = "\n".join(f"- {c}" for c in categories)
         message = claude.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=50,
@@ -200,16 +216,17 @@ Respond with ONLY the category name exactly as shown above, nothing else."""
         )
         category = message.content[0].text.strip()
         # Validate category is in the list
-        if category in CATEGORIES:
+        if category in categories:
             return category
         # Try to find a close match
-        for c in CATEGORIES:
+        for c in categories:
             if c.lower() in category.lower() or category.lower() in c.lower():
                 return c
-        return CATEGORIES[1]  # Default to "Idea Collection"
+        return categories[0] if categories else "Uncategorized"
     except Exception as e:
         logger.error(f"Failed to get category from Claude: {e}")
-        return "Idea Collection"
+        categories = get_categories()
+        return categories[0] if categories else "Uncategorized"
 
 
 def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str]:
@@ -222,7 +239,8 @@ def get_title_and_category_from_claude(content: str, url: str) -> tuple[str, str
         if len(content) > 2000:
             content = content[:2000] + "..."
 
-        categories_list = "\n".join(f"- {c}" for c in CATEGORIES)
+        categories = get_categories()
+        categories_list = "\n".join(f"- {c}" for c in categories)
         source_line = f"\nURL: {url}" if url else ""
         message = claude.messages.create(
             model="claude-sonnet-4-20250514",
@@ -248,7 +266,8 @@ CATEGORY: [category exactly as shown above]"""
         lines = response_text.split('\n')
 
         title = "Untitled"
-        category = "Idea Collection"
+        default_category = categories[0] if categories else "Uncategorized"
+        category = default_category
 
         for line in lines:
             if line.startswith("TITLE:"):
@@ -256,10 +275,10 @@ CATEGORY: [category exactly as shown above]"""
             elif line.startswith("CATEGORY:"):
                 cat = line.replace("CATEGORY:", "").strip()
                 # Validate category
-                if cat in CATEGORIES:
+                if cat in categories:
                     category = cat
                 else:
-                    for c in CATEGORIES:
+                    for c in categories:
                         if c.lower() in cat.lower() or cat.lower() in c.lower():
                             category = c
                             break
@@ -268,7 +287,8 @@ CATEGORY: [category exactly as shown above]"""
 
     except Exception as e:
         logger.error(f"Failed to get title and category from Claude: {e}")
-        return "Untitled", "Idea Collection"
+        categories = get_categories()
+        return "Untitled", categories[0] if categories else "Uncategorized"
 
 
 def save_to_notion(title: str, category: str, content: str) -> tuple[bool, str, str | None]:
@@ -345,7 +365,7 @@ def update_notion_category(page_id: str, new_category: str) -> tuple[bool, str]:
 
 def format_category_options() -> str:
     """Format categories as a numbered list for display."""
-    return "\n".join(f"{i+1}. {cat}" for i, cat in enumerate(CATEGORIES))
+    return "\n".join(f"{i+1}. {cat}" for i, cat in enumerate(get_categories()))
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -356,11 +376,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Check if this is a category selection reply (single number 1-7)
     if text.isdigit():
         num = int(text)
-        if 1 <= num <= len(CATEGORIES):
+        categories = get_categories()
+        if 1 <= num <= len(categories):
             # Check if there's a pending category edit
             pending = context.user_data.get("pending_category_edit")
             if pending:
-                new_category = CATEGORIES[num - 1]
+                new_category = categories[num - 1]
                 page_id = pending["page_id"]
                 old_category = pending["category"]
 
@@ -463,6 +484,9 @@ def main() -> None:
     if missing_vars:
         logger.error(f"Missing environment variables: {', '.join(missing_vars)}")
         return
+
+    # Fetch categories from Notion at startup
+    fetch_categories_from_notion()
 
     # Create application
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
