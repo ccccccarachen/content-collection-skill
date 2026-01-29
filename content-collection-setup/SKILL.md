@@ -59,17 +59,12 @@ Skip completed steps.
 #### 1A. Anthropic API Key
 
 Ask:
-> Do you have an Anthropic API key? Get one at: https://console.anthropic.com/settings/keys
+> Do you have an Anthropic API key? If not, get one at: https://console.anthropic.com/settings/keys
+> It should start with `sk-ant-`. Save it somewhere safe — you'll paste it into Railway later.
+>
+> Confirm once you have it. (yes/no)
 
-**Validate format:**
-```python
-import re
-valid = bool(re.match(r'^sk-ant-', key))
-```
-
-If invalid: "API keys start with `sk-ant-`. Double-check you copied the full key."
-
-On success: "Anthropic API key validated. Save it somewhere safe - you'll need it for Railway."
+On success: "Great, Anthropic API key ready. You'll add it to Railway in Phase 2."
 
 #### 1B. Notion Setup (Most Complex)
 
@@ -83,14 +78,11 @@ Ask:
 > - Select your workspace
 > - Click Submit
 >
-> Copy the "Internal Integration Secret" and paste it here.
+> Copy the "Internal Integration Secret" and save it somewhere safe — you'll paste it into Railway later. It starts with `ntn_` or `secret_`.
+>
+> Confirm once you have it. (yes/no)
 
-**Validate format:**
-```python
-valid = key.startswith("ntn_") or key.startswith("secret_")
-```
-
-On success: "Notion integration token saved."
+On success: "Notion integration token ready. You'll add it to Railway in Phase 2."
 
 **1B-ii. Create Database:**
 
@@ -120,51 +112,36 @@ Ask:
 Ask:
 > Open your database as a full page. Copy the URL.
 > It looks like: `https://www.notion.so/workspace/DATABASE_ID?v=VIEW_ID`
-> Paste the URL or just the database ID here.
+> The database ID is the 32-character string in the URL before the `?v=` part.
+> Save it somewhere safe — you'll paste it into Railway later.
+>
+> Confirm once you have it. (yes/no)
 
-**Extract and validate:**
-```python
-import re
-# Extract 32-char hex ID from URL or raw input
-match = re.search(r'([a-f0-9]{32})', url_or_id.replace('-', ''))
-if match:
-    db_id = match.group(1)
-    # Format with hyphens: 8-4-4-4-12
-    formatted = f"{db_id[:8]}-{db_id[8:12]}-{db_id[12:16]}-{db_id[16:20]}-{db_id[20:]}"
-```
-
-If no match: "Couldn't find a valid database ID. The ID is the 32-character string in the URL before the `?v=` part."
-
-On success: "Database ID extracted: `{formatted}`"
+On success: "Database ID ready. You'll add it to Railway in Phase 2."
 
 #### 1C. Telegram Bot Token
 
 Ask:
 > Open Telegram, message @BotFather, send `/newbot`.
 > Follow the prompts to name your bot.
-> Copy the token and paste it here.
+> Copy the token and save it somewhere safe — you'll paste it into Railway later. It looks like `123456789:ABCdefGHI...`.
 >
 > Token guide: https://core.telegram.org/bots#how-do-i-create-a-bot
+>
+> Confirm once you have it. (yes/no)
 
-**Validate format:**
-```python
-valid = bool(re.match(r'^\d+:[A-Za-z0-9_-]{35,}$', token))
-```
-
-If invalid: "Telegram tokens look like `123456789:ABCdefGHI...`. Make sure you copied the full token from BotFather."
-
-On success: "Telegram bot token validated. All API keys collected!"
+On success: "Telegram bot token ready. All API keys collected!"
 
 #### Phase 1 Complete
 
 Show summary:
-> **Phase 1 Complete!**
-> - Anthropic API key: `sk-ant-...{last4}`
-> - Notion token: `ntn_...{last4}`
-> - Database ID: `{formatted_id}`
-> - Telegram token: `{first_part}:...{last4}`
+> **Phase 1 Complete!** You have all 4 credentials ready:
+> - Anthropic API key
+> - Notion integration token
+> - Notion database ID
+> - Telegram bot token
 >
-> Ready for deployment?
+> You'll paste these into Railway as environment variables in Phase 2. Ready for deployment?
 
 ### Phase 2: Railway Deployment (~10 min)
 
