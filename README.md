@@ -19,8 +19,8 @@ Save links and notes to Notion via Telegram. Send a URL or text, and the bot use
 
 2. **Clone and open the project:**
    ```
-   git clone https://github.com/ccccccarachen/content-collection.git
-   cd content-collection
+   git clone https://github.com/ccccccarachen/content-collection-skill.git
+   cd content-collection-skill
    ```
 
 3. **Ask Claude to set up the bot:**
